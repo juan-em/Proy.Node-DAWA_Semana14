@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Subir archivos</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" />
+  <style>
+    /* Estilos personalizados */
+    .container {
+      margin-top: 50px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="row">
+      <div class="col-md-6">
+        <h5 class="card-title">Un archivo</h5>
+        <form action="/upload" method="post" enctype="multipart/form-data" id="single-form">
+          <div class="form-group">
+            <label for="single-file" class="btn btn-success">Seleccionar archivo</label>
+            <input type="file" id="single-file" class="form-control-file" name="file" style="display: none" />
+          </div>
+          <input type="submit" class="btn btn-success" value="Cargar" />
+        </form>
+        <div id="file-info" style="display: none"></div>
+      </div>
+    </div>
+    <br>
+    <br>
+
+    <div class="row">
+      <div class="col-md-6">
+        <h5 class="card-title">Varios archivos</h5>
+        <form action="/upload-multiple" method="post" enctype="multipart/form-data" id="multiple-form">
+          <div class="form-group">
+            <label for="multiple-files" class="btn btn-success">Seleccionar archivos</label>
+            <input type="file" id="multiple-files" class="form-control-file" name="files" multiple style="display: none" />
+          </div>
+          <div id="file-preview"></div>
+          <button type="submit" class="mt-2 btn btn-success">Subir archivos</button>
+        </form>
+        <div id="multiple-file-info" style="display: none"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+  <script>
+    // Script para mostrar los detalles del archivo cargado
+    const singleForm = document.getElementById("single-form");
+    const multipleForm = document.getElementById("multiple-form");
+    const fileInfoDiv = document.querySelector("#file-info");
+    const multipleFileInfoDiv = document.querySelector("#multiple-file-info");
+    const singleFileInput = document.getElementById("single-file");
+    const multipleFileInput = document.getElementById("multiple-files");
+    const filePreview = document.getElementById("file-preview");
+    let fileQueue = [];
+
+    singleForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const file = singleFileInput.files[0];
+
+      // Validar tipo de archivo
+      const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+      if (!allowedTypes.includes(file.type)) {
+        alert("Solo se permiten archivos JPEG, PNG o PDF.");
+        return;
+      }
+
+      // Validar tamaño máximo del archivo (en bytes)
+      const maxSize = 5 * 1024 * 1024; // 5 MB
+      if (file.size > maxSize) {
+        alert("El tamaño máximo permitido es de 5 MB.");
+        return;
+      }
+
+      const formData = new FormData(singleForm);
+      const response = await fetch("/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const fileInfo = await response.json();
+        fileInfoDiv.innerHTML = `
+          <p>Nombre: ${fileInfo.filename}</p>
+          <p>Nombre original: ${fileInfo.originalname}</p>
+          <p>Tamaño: ${fileInfo.size} bytes</p>
+          <p>Tipo MIME: ${fileInfo.mimetype}</p>
+        `;
+        fileInfoDiv.style.display = "block";
+      } else {
+        fileInfoDiv.innerHTML = "Error al cargar el archivo.";
+      }
+    });
+
+    singleFileInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      fileQueue = [file];
+      renderFilePreview();
+    });
+
+    multipleFileInput.addEventListener("change", (event) => {
+      const files = event.target.files;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        fileQueue.push(file);
+      }
+
+      renderFilePreview();
+    });
+
+    filePreview.addEventListener("click", (event) => {
+      if (event.target.tagName === "BUTTON") {
+        const index = event.target.dataset.index;
+        fileQueue.splice(index, 1);
+        renderFilePreview();
+      }
+    });
+
+    multipleForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const formData = new FormData(multipleForm);
+      fileQueue.forEach((file) => {
+        formData.append("files", file);
+      });
+
+      const response = await fetch("/upload-multiple", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const fileInfos = await response.json();
+        multipleFileInfoDiv.innerHTML = "";
+        fileInfos.forEach((fileInfo, i) => {
+          const fileItem = document.createElement("div");
+          fileItem.classList.add("mt-2");
+          fileItem.innerHTML = `
+            <p>Nombre: ${fileInfo.filename}</p>
+            <p>Nombre original: ${fileInfo.originalname}</p>
+            <p>Tamaño: ${fileInfo.size} bytes</p>
+            <p>Tipo MIME: ${fileInfo.mimetype}</p>
+            <span>================================</span>
+          `;
+          if (i !== fileInfos.length - 1) {
+            multipleFileInfoDiv.appendChild(fileItem);
+          }
+        });
+        multipleFileInfoDiv.style.display = "block";
+      } else {
+        multipleFileInfoDiv.innerHTML = "Error al cargar los archivos.";
+      }
+
+      // Limpia la cola de archivos después de subirlos
+      fileQueue = [];
+      renderFilePreview();
+
+      // Vaciar el input de múltiples archivos
+      multipleFileInput.value = "";
+    });
+
+    function renderFilePreview() {
+      filePreview.innerHTML = "";
+
+      fileQueue.forEach((file, i) => {
+        const fileItem = document.createElement("div");
+        fileItem.classList.add("mt-2");
+        fileItem.innerHTML = `
+          <span>${file.name}</span>
+          <button type="button" class="btn btn-sm btn-danger ml-2" data-index="${i}">Eliminar</button>
+        `;
+        filePreview.appendChild(fileItem);
+      });
+    }
+  </script>
+</body>
+</html>
